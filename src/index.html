@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hybrid React/Pure JS FPS Game</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000; }
+        /* Game container takes up the whole screen, sitting above React's root */
+        #gamecontainer { 
+            position: absolute; 
+            top: 0; 
+            left: 0; 
+            width: 100vw; 
+            height: 100vh; 
+            z-index: 10; 
+        }
+        #root { z-index: 1; color: white; padding: 20px; }
+    </style>
+</head>
+<body>
+    <!-- React Root (Runs App.jsx) -->
+    <div id="root">
+      <h1>React App Running in Background</h1>
+      <p>The Three.js FPS Game is loading in the foreground (#gamecontainer).</p>
+    </div>
+
+    <!-- Game Container (Canvas will be injected here) -->
+    <div id="gamecontainer"></div>
+
+    <!-- Custom Import Map (As requested) -->
+    <script type="importmap">
+        {
+            "imports": 
+            {
+                "three": "../build/three.module.js",
+                "three/addons/": "./jsm/"
+            }
+        }
+    </script>
+    
+    <!-- 1. The main React entry point -->
+    <script type="module" src="/src/main.jsx"></script>
+    
+    <!-- 2. The pure JavaScript game logic entry point -->
+    <script type="module" src="./fpsgame.js"></script>
+</body>
+</html>
+
