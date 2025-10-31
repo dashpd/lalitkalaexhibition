@@ -7,11 +7,15 @@ import { Capsule } from 'three/examples/jsm/math/Capsule.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js'; 
 
 // --- Configuration Constants ---
-const MODEL_PATH = '/assets/models/Model.glb';
-const DRACO_PATH = 'https://www.gstatic.com/draco/v1/decoders/'; // Standard CDN path for decoders
+// FIX: Changed from absolute path ('/assets/...') to relative path ('./assets/...')
+// This ensures the browser looks inside the current repository subfolder on GitHub Pages.
+const MODEL_PATH = './assets/models/Model.glb'; 
+// useGLTF defaults to this CDN for Draco, making the code cleaner:
+const DRACO_PATH = 'https://www.gstatic.com/draco/v1/decoders/'; 
+
 const GRAVITY = 30; 
 const JUMP_VELOCITY = 15;
-const SPEED = 20;
+const SPEED = 5;
 
 // --- Key Mapping for useKeyboardControls ---
 const controlsMap = [
@@ -55,7 +59,7 @@ function Loader({ isOctreeReady }) {
 // --- 1. Model Component and Physics Setup ---
 function GameEnvironment({ setOctree, setIsOctreeReady }) {
     
-    // 1. Load the model using the robust Draco path configuration
+    // Pass the DRACO_PATH directly as the second argument for reliable decompression
     const { scene } = useGLTF(MODEL_PATH, DRACO_PATH); 
 
     useEffect(() => {
@@ -68,10 +72,8 @@ function GameEnvironment({ setOctree, setIsOctreeReady }) {
                 }
             });
 
-            // 2. Wrap the HEAVY Octree construction in a Promise/setTimeout
-            // This runs the calculation ASYNCHRONOUSLY, preventing the browser freeze.
-            // We use setTimeout(0) to ensure the work is done in the next event loop cycle, 
-            // allowing the UI to update its "Processing" status first.
+            // Wrap the HEAVY Octree construction in an async Promise/setTimeout 
+            // to prevent the browser from freezing during calculation.
             const buildOctreeAsync = () => new Promise(resolve => {
                 setTimeout(() => {
                     console.log('Starting Octree build...');
@@ -130,8 +132,10 @@ function PlayerControls({ octree, isOctreeReady }) {
 
         const handleMouseMove = (event) => {
             if (document.pointerLockElement === gl.domElement) {
+                // Yaw (Y-axis rotation) 
                 camera.rotation.y -= event.movementX / 500; 
                 
+                // Pitch (X-axis rotation, clamped)
                 let pitchChange = event.movementY / 500;
                 
                 camera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, camera.rotation.x - pitchChange));
