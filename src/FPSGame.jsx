@@ -7,7 +7,7 @@ import { Capsule } from 'three/examples/jsm/math/Capsule.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js'; 
 
 // --- Configuration Constants ---
-const MODEL_PATH = 'public/assets/models/Model.glb';
+const MODEL_PATH = '/assets/models/Model.glb';
 const DRACO_PATH = 'https://www.gstatic.com/draco/v1/decoders/'; // Standard CDN path for decoders
 const GRAVITY = 30; 
 const JUMP_VELOCITY = 15;
