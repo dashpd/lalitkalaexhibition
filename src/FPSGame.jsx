@@ -7,15 +7,14 @@ import { Capsule } from 'three/examples/jsm/math/Capsule.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js'; 
 
 // --- Configuration Constants ---
-// FIX: Changed from absolute path ('/assets/...') to relative path ('./assets/...')
-// This ensures the browser looks inside the current repository subfolder on GitHub Pages.
-const MODEL_PATH = './assets/models/Model.glb'; 
-// useGLTF defaults to this CDN for Draco, making the code cleaner:
+// Use two separate paths for the two concerns:
+const VISUAL_MODEL_PATH = './assets/models/Environment_Visual.glb'; 
+const PHYSICS_MODEL_PATH = './assets/models/Environment_Physics.glb'; 
 const DRACO_PATH = 'https://www.gstatic.com/draco/v1/decoders/'; 
 
 const GRAVITY = 30; 
 const JUMP_VELOCITY = 15;
-const SPEED = 5;
+const SPEED = 20;
 
 // --- Key Mapping for useKeyboardControls ---
 const controlsMap = [
@@ -27,16 +26,16 @@ const controlsMap = [
 ];
 
 // --- Loader Component (Shows Download progress and Processing status) ---
-function Loader({ isOctreeReady }) {
+function Loader({ isPhysicsReady }) {
   const { progress } = useProgress();
   
-  let statusText = `Downloading Environment: ${progress.toFixed(0)}%`;
+  let statusText = `Downloading Models: ${progress.toFixed(0)}%`;
   let color = "#1e90ff"; // Dodger Blue for download
 
-  if (progress === 100 && !isOctreeReady) {
+  if (progress === 100 && !isPhysicsReady) {
     statusText = "Processing Collisions (Octree Build)...";
     color = "#ff4500"; // Orange-Red for processing
-  } else if (progress === 100 && isOctreeReady) {
+  } else if (progress === 100 && isPhysicsReady) {
       statusText = "Ready! Click to start.";
       color = "#32cd32"; // Lime Green for ready
   }
@@ -48,35 +47,49 @@ function Loader({ isOctreeReady }) {
       position={[0, 0, -2]} 
       anchorX="center" 
       anchorY="middle"
-      maxWidth={5} // Prevent text from being too wide
+      maxWidth={5}
     >
       {statusText}
     </Text>
   );
 }
 
-
-// --- 1. Model Component and Physics Setup ---
-function GameEnvironment({ setOctree, setIsOctreeReady }) {
-    
-    // Pass the DRACO_PATH directly as the second argument for reliable decompression
-    const { scene } = useGLTF(MODEL_PATH, DRACO_PATH); 
+// --- 1. VISUAL Component: Loads and renders the detailed model ---
+function GameEnvironment() {
+    // Loads the large, detailed model (VISUAL_MODEL_PATH)
+    const { scene } = useGLTF(VISUAL_MODEL_PATH, DRACO_PATH); 
 
     useEffect(() => {
         if (scene) {
-            // Ensure shadows are set up 
+            // Apply shadows to the visual mesh
             scene.traverse(child => {
                 if (child.isMesh) {
                     child.castShadow = true;
                     child.receiveShadow = true;
                 }
             });
+        }
+    }, [scene]);
 
+    // This component renders the high-fidelity visual model.
+    return (
+        <primitive object={scene} scale={1} castShadow receiveShadow />
+    );
+}
+
+// --- 2. PHYSICS Component: Loads the low-poly model and builds the Octree (invisible) ---
+function PhysicsModel({ setOctree, setIsPhysicsReady }) {
+    
+    // Load the small, low-poly model (PHYSICS_MODEL_PATH)
+    const { scene } = useGLTF(PHYSICS_MODEL_PATH, DRACO_PATH); 
+
+    useEffect(() => {
+        if (scene) {
             // Wrap the HEAVY Octree construction in an async Promise/setTimeout 
             // to prevent the browser from freezing during calculation.
             const buildOctreeAsync = () => new Promise(resolve => {
                 setTimeout(() => {
-                    console.log('Starting Octree build...');
+                    console.log('Starting Octree build from low-poly mesh...');
                     const octree = new Octree();
                     octree.fromGraphNode(scene);
                     console.log('Octree build complete.');
@@ -86,20 +99,18 @@ function GameEnvironment({ setOctree, setIsOctreeReady }) {
 
             buildOctreeAsync().then(octree => {
                 setOctree(octree);
-                setIsOctreeReady(true);
+                setIsPhysicsReady(true);
             });
         }
-    }, [scene, setOctree, setIsOctreeReady]);
+    }, [scene, setOctree, setIsPhysicsReady]);
 
-    // This component renders the model as soon as it's downloaded
-    return (
-        <primitive object={scene} scale={1} castShadow receiveShadow />
-    );
+    // IMPORTANT: Return null. This model is only for collision calculation and should not be seen.
+    return null;
 }
 
 
-// --- 2. FPS Control and Physics Loop ---
-function PlayerControls({ octree, isOctreeReady }) {
+// --- 3. FPS Control and Physics Loop (Remains the same, now waits for isPhysicsReady) ---
+function PlayerControls({ octree, isPhysicsReady }) {
     const { camera, gl } = useThree();
     
     useEffect(() => {
@@ -112,7 +123,6 @@ function PlayerControls({ octree, isOctreeReady }) {
         new Capsule(new THREE.Vector3(0, 0.35, 0), new THREE.Vector3(0, 1.6, 0), 0.35)
     , []);
     
-    // Set initial position
     playerCollider.end.set(0, 10, 0); 
     playerCollider.start.set(0, 10 - 1.25, 0); 
 
@@ -122,7 +132,7 @@ function PlayerControls({ octree, isOctreeReady }) {
     
     // Setup for pointer lock control and camera rotation
     useEffect(() => {
-        if (!isOctreeReady) return; // Wait until ready
+        if (!isPhysicsReady) return; // Wait until ready
 
         const handleMouseDown = () => {
             gl.domElement.requestPointerLock();
@@ -132,10 +142,8 @@ function PlayerControls({ octree, isOctreeReady }) {
 
         const handleMouseMove = (event) => {
             if (document.pointerLockElement === gl.domElement) {
-                // Yaw (Y-axis rotation) 
                 camera.rotation.y -= event.movementX / 500; 
                 
-                // Pitch (X-axis rotation, clamped)
                 let pitchChange = event.movementY / 500;
                 
                 camera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, camera.rotation.x - pitchChange));
@@ -151,9 +159,7 @@ function PlayerControls({ octree, isOctreeReady }) {
             gl.domElement.removeEventListener('mousedown', handleMouseDown);
             document.removeEventListener('mousemove', handleMouseMove);
         };
-    }, [camera, gl.domElement, isOctreeReady]); // Depend on isOctreeReady
-
-    // --- Physics Helpers (Same as before) ---
+    }, [camera, gl.domElement, isPhysicsReady]); 
 
     const getForwardVector = () => {
         camera.getWorldDirection(playerDirection);
@@ -230,7 +236,7 @@ function PlayerControls({ octree, isOctreeReady }) {
 
     // --- R3F Render Loop ---
     useFrame((_, deltaTime) => {
-        if (!isOctreeReady) return; // Only run physics if Octree is ready
+        if (!isPhysicsReady) return; // Only run physics if the Octree is ready
 
         const stepDelta = Math.min(0.05, deltaTime); 
         
@@ -243,10 +249,10 @@ function PlayerControls({ octree, isOctreeReady }) {
     return null;
 }
 
-// --- 3. Main Application Component (The unified App/Scene) ---
+// --- 4. Main Application Component (The unified App/Scene) ---
 export default function FPSGame() {
     const [octree, setOctree] = useState(null);
-    const [isOctreeReady, setIsOctreeReady] = useState(false);
+    const [isPhysicsReady, setIsPhysicsReady] = useState(false);
     
     return (
         <div style={{ width: '100vw', height: '100vh', backgroundColor: '#111' }}>
@@ -256,7 +262,6 @@ export default function FPSGame() {
                     camera={{ fov: 75, near: 0.1, far: 1000 }}
                     onContextMenu={(e) => e.preventDefault()}
                 >
-                    {/* Scene Setup */}
                     <color attach="background" args={['#88ccee']} />
                     
                     {/* Lighting */}
@@ -269,17 +274,21 @@ export default function FPSGame() {
                         shadow-mapSize-height={2048}
                     />
 
-                    {/* Model Loading (Suspense fallback renders the Loader component) */}
-                    <Suspense fallback={<Loader isOctreeReady={isOctreeReady} />}>
+                    {/* All loading happens within Suspense */}
+                    <Suspense fallback={<Loader isPhysicsReady={isPhysicsReady} />}>
                         
-                        {/* 1. Load Model and trigger asynchronous Octree build */}
-                        <GameEnvironment setOctree={setOctree} setIsOctreeReady={setIsOctreeReady} />
+                        {/* 1. VISUAL: Loads the detailed, high-poly model */}
+                        <GameEnvironment />
                         
-                        {/* 2. Control Camera and run Physics loop (waits for Octree) */}
-                        <PlayerControls octree={octree} isOctreeReady={isOctreeReady} />
+                        {/* 2. PHYSICS: Loads the low-poly model, builds the Octree asynchronously, and is invisible */}
+                        <PhysicsModel setOctree={setOctree} setIsPhysicsReady={setIsPhysicsReady} />
+                        
+                        {/* 3. CONTROLS: Runs physics only when Octree is built */}
+                        <PlayerControls octree={octree} isPhysicsReady={isPhysicsReady} />
                         
                     </Suspense>
-                    <Loader isOctreeReady={isOctreeReady} />
+                    {/* Loader is shown over the Canvas content while loading */}
+                    <Loader isPhysicsReady={isPhysicsReady} />
                 </Canvas>
             </KeyboardControls>
         </div>
