@@ -1,1 +1,1 @@
-LalitKala Academy model for the exhibition planning process
+Lalit Kala Academy model for the exhibition planning process
